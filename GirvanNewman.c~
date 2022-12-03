@@ -1,0 +1,210 @@
+// Girvan-Newman Algorithm for community discovery
+// COMP2521 Assignment 2
+
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+#include "CentralityMeasures.h"
+#include "GirvanNewman.h"
+#include "Graph.h"
+
+///////////HELPER FUNCTIONS//////////////
+static Dendrogram newDend(int v);
+static void stubGirNew(Graph g, int *componentOf, int compID, Dendrogram d);
+static void components(Graph g, int *componentOf);
+static void dfsComponent(Graph g, Vertex v, int id, int *componentOf);
+
+/**
+ * Generates  a Dendrogram for the given graph g using the Girvan-Newman
+ * algorithm.
+ * 
+ * The function returns a 'Dendrogram' structure.
+ */
+Dendrogram GirvanNewman(Graph g) {
+    int numVertex = GraphNumVertices(g);
+    if (g == NULL || GraphNumVertices(g) < 1) {
+        return NULL;
+    }
+    
+    // allocate space for componentOf array to hold compIDs of each vertex 
+    int *componentOf = (int *)malloc(numVertex*sizeof(int));
+    
+    // initialise and form dendrogram structure with root d
+    Dendrogram d = newDend(0);
+    components(g, componentOf);
+    stubGirNew(g, componentOf, componentOf[0], d);
+    return d;
+}
+
+static void stubGirNew(Graph g, int *componentOf, int compID, Dendrogram d) {
+    // get highestEdgeBetweeness value of component with compID
+    EdgeValues e = edgeBetweennessCentrality(g);
+    double highestEdgeBetweenness = -1.0;
+    int numVertex = GraphNumVertices(g);
+    for (int i = 0; i < numVertex; i++) {
+        for (int j = 0; j < numVertex; j++) {
+            if (e.values[i][j] > highestEdgeBetweenness && componentOf[i] == compID && componentOf[j] == compID) {
+                highestEdgeBetweenness = e.values[i][j];
+            }
+        }
+    }
+    // remove highestEdgeBetweeness edge(s) in graph in component with compID
+    if (highestEdgeBetweenness != -1.0) {
+        for (int i = 0; i < numVertex; i++) {
+            for (int j = 0; j < numVertex; j++) {
+                if (e.values[i][j] == highestEdgeBetweenness && componentOf[i] == compID && componentOf[j] == compID) {
+                    GraphRemoveEdge(g, i, j);
+                }
+
+            }
+        }
+    }
+    
+    // copy componentOf into tempCompOf array
+    int tempCompOf[numVertex];
+    for (int i = 0; i < numVertex; i++) { 
+        tempCompOf[i] = componentOf[i];
+    }
+    
+    // recalculate compIDs of vertices after edge removal
+    components(g, componentOf);
+    
+    // find left and right compIDs of dendrogram after edge removal
+    int compID_1 = -1;
+    int compID_2 = -1;
+    for (int i = 0; i < numVertex; i++) {
+    // obtain 1 vertex with old compID, then put recalculated compID of that
+    // vertex in compID_1
+        if (tempCompOf[i] == compID) {
+            compID_1 = componentOf[i];
+        }
+    }
+    for (int i = 0; i < numVertex; i++) {
+    // obtain another vertex with old compID, then put recalculated compID of
+    // that vertex in compID_2 provided compID_1 != compID_2
+        if (tempCompOf[i] == compID && componentOf[i] != compID_1) {
+            compID_2 = componentOf[i];
+        }
+    }
+    if (compID_2 != -1) {   
+    // if compID_2 is changed after obtaining compIDs of left and right, 
+    // left and right clusters are present after recalculation.
+    // in this case, split dendrograms
+        int totalVertex_1 = 0;
+        int vertex_1 = -1;
+        for (int i = 0; i < numVertex; i++) {
+        // get number of vertices in compID_1
+            if (componentOf[i] == compID_1) {
+                totalVertex_1++;
+                vertex_1 = i;
+            } 
+        }
+        if (totalVertex_1 == 1) { // leaf dend, store vertex_1 in left node
+            d->right = newDend(vertex_1);
+        } else { // non-leaf dend, store -1 in left node
+            d->right = newDend(-1);
+        }
+        stubGirNew(g, componentOf, compID_1, d->right);
+        
+        
+        int totalVertex_2 = 0;
+        int vertex_2 = -1;
+        for (int i = 0; i < numVertex; i++) {
+        // get number of vertices in compID_2
+            if (componentOf[i] == compID_2) {
+                totalVertex_2++;
+                vertex_2 = i;
+            }
+        }
+        if (totalVertex_2 == 1) { // leaf dend, store vertex_2 in left node
+            d->left = newDend(vertex_2);
+        } else { // non-leaf dend, store -1 in left node
+            d->left = newDend(-1);
+        }
+        stubGirNew(g, componentOf, compID_2, d->left);
+    } else {
+    // components not split up after edge removal
+        int totalVertex = 0;
+        for (int i = 0; i < numVertex; i++) {
+            if (componentOf[i] == compID_1) {
+                totalVertex++;
+            }
+        }
+        if (totalVertex > 1) {
+            // if not leaf node, call stubGirNew at same node
+            stubGirNew(g, componentOf, compID_1, d);
+        }
+    }
+    // returns if leaf node reached
+    return;
+}
+
+// algorithm to assign vertices to connected components
+static void components(Graph g, int *componentOf) {
+    int numVertex = GraphNumVertices(g);
+    // switch g to undirected graph by adding edge(i,j) for every edge(j,i)
+    Graph temp = GraphNew(numVertex);
+    for (int i = 0; i < numVertex; i++) {
+        for (int j = 0; j < numVertex; j++) {
+            if (GraphIsAdjacent(g, i, j)) {
+                GraphInsertEdge(temp, i, j, 1);
+                GraphInsertEdge(temp, j, i, 1);
+            }
+        }
+    }
+    
+    // used algorithm from connected components (week 7 lecture)
+    for (int v = 0; v < numVertex; v++) {
+        componentOf[v] = -1;
+    }
+    int compID = 0; // component ID
+    for (int v = 0; v < numVertex; v++) {
+        if (componentOf[v] == -1) {
+            dfsComponent(temp, v, compID, componentOf);
+            compID++;
+        }
+    }
+    GraphFree(temp);
+    return;
+}
+
+// dfs scan of one connected component
+static void dfsComponent(Graph g, Vertex v, int id, int *componentOf) {
+    componentOf[v] = id;
+    int numVertex = GraphNumVertices(g);
+    for (int i = 0; i < numVertex; i++) {
+        for (int j = 0; j < numVertex; j++) {
+            if (GraphIsAdjacent(g, i, j)) {
+                if (componentOf[j] == -1) {
+                    dfsComponent(g, j, id, componentOf);
+                }
+            }
+        }
+    }
+    return;
+}
+
+// returns new dendrogram node with vertex v
+static Dendrogram newDend(Vertex v) {
+    Dendrogram d = malloc(sizeof(Dendrogram));
+    d->vertex = v;
+    d->left = NULL;
+    d->right = NULL;
+    return d;
+}
+
+/**
+ * Frees all memory associated with the given Dendrogram  structure.  We
+ * will call this function during testing, so you must implement it.
+ */
+void freeDendrogram(Dendrogram d) {
+	// frees dendrogram recursively from bottom up(tree)
+	if (d == NULL) {
+	    return;
+	}
+	freeDendrogram(d->left);
+	freeDendrogram(d->right);
+	free(d);
+}
+

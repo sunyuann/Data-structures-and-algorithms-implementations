@@ -1,0 +1,109 @@
+// Floyd Warshall ADT interface
+// COMP2521 Assignment 2
+
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+#include "FloydWarshall.h"
+#include "Graph.h"
+
+/**
+ * Finds all shortest paths between all pairs of nodes.
+ * 
+ * The  function  returns  a 'ShortestPaths' structure with the required
+ * information:
+ * - the number of vertices in the graph
+ * - distance matrix
+ * - matrix of intermediates (see description above)
+ */
+ShortestPaths FloydWarshall(Graph g) {
+	ShortestPaths sps;
+	
+	// get num of vertices in graph 
+	sps.numNodes = GraphNumVertices(g);
+	
+	// initialise dist array to INFINITY
+	sps.dist = (int **)(malloc(sps.numNodes * sizeof(int *)));
+	for (int i = 0; i < sps.numNodes; i++) {
+	    sps.dist[i] = (int *)(malloc(sps.numNodes * sizeof(int)));
+	}
+	for (int i = 0; i < sps.numNodes; i++) {
+	    for (int j = 0; j < sps.numNodes; j++) {
+	        sps.dist[i][j] = INFINITY;
+	    }
+	}
+	
+	// initialise next array to -1
+	sps.next = (int **)(malloc(sps.numNodes * sizeof(int *)));
+	for (int i = 0; i < sps.numNodes; i++) {
+	    sps.next[i] = (int *)(malloc(sps.numNodes * sizeof(int)));
+	}
+	for (int i = 0; i < sps.numNodes; i++) {
+	    for (int j = 0; j < sps.numNodes; j++) {
+	        sps.next[i][j] = -1;
+	    }
+	}
+
+	AdjList temp;
+	// set dist[u][v] to weight(u,v) for all edge(u,v)
+	for (int i = 0; i < sps.numNodes; i++) {
+	    for (temp = GraphOutIncident(g, i); temp != NULL; temp = temp->next) {
+	        sps.dist[i][temp->v] = temp->weight;
+	        sps.next[i][temp->v] = temp->v;
+	    }
+	}
+	for (int i = 0; i < sps.numNodes; i++) {
+	    for (temp = GraphInIncident(g, i); temp != NULL; temp = temp->next) {
+	        sps.dist[temp->v][i] = temp->weight;
+	        sps.next[temp->v][i] = i;
+	    }
+	}
+	
+	// set dist[v][v] to 0 for all edge(v,v)
+	for (int i = 0; i < sps.numNodes; i++) {
+	    sps.dist[i][i] = 0;
+	}
+	
+	// used algorithm from Floyd Warshall wikipedia (link in assignment website)
+	for (int k = 0; k < sps.numNodes; k++) {
+	    for (int i = 0; i < sps.numNodes; i++) {
+	        for (int j = 0; j < sps.numNodes; j++) {
+	            if (sps.dist[i][k] != INFINITY && sps.dist[k][j] != INFINITY) {
+	                // checks if path exists from [i][k] & [k][j]
+	                if (sps.dist[i][j] > sps.dist[i][k] + sps.dist[k][j]) {
+	                    sps.dist[i][j] = sps.dist[i][k] + sps.dist[k][j];
+	                    sps.next[i][j] = sps.next[i][k];
+	                }
+	            }
+	        }
+	    }
+	}
+	return sps;
+}
+
+/**
+ * This  function  is  for  you to print out the ShortestPaths structure
+ * while you are debugging/testing your implementation. 
+ * 
+ * We will not call this function during testing, so you may  print  out
+ * the  given  ShortestPaths  structure in whatever format you want. You
+ * may choose not to implement this function.
+ */
+void showShortestPaths(ShortestPaths sps) {
+}
+
+/**
+ * Frees  all  memory associated with the given ShortestPaths structure.
+ * We will call this function during testing, so you must implement it.
+ */
+void freeShortestPaths(ShortestPaths sps) {
+	// free sps.dist and sps.next (2d arrays)
+	for (int i = 0; i < sps.numNodes; i++) {
+	    free(sps.dist[i]);
+	    free(sps.next[i]);
+	}
+	free(sps.dist);
+	free(sps.next);
+}
+
